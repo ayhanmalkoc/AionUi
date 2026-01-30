@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { IChannelPairingCodeRow, IChannelPairingRequest, IChannelPluginConfig, IChannelSession, IChannelSessionRow, IChannelUser, IChannelUserRow, PluginStatus, PluginType } from '@/channels/types';
+import { rowToChannelSession, rowToChannelUser, rowToPairingRequest } from '@/channels/types';
+import { decryptCredentials, encryptCredentials } from '@/channels/utils/credentialCrypto';
 import { ensureDirectory, getDataPath } from '@process/utils';
 import type Database from 'better-sqlite3';
 import BetterSqlite3 from 'better-sqlite3';
@@ -13,15 +16,14 @@ import { runMigrations as executeMigrations } from './migrations';
 import { CURRENT_DB_VERSION, getDatabaseVersion, initSchema, setDatabaseVersion } from './schema';
 import type { IConversationRow, IMessageRow, IPaginatedResult, IQueryResult, IUser, TChatConversation, TMessage } from './types';
 import { conversationToRow, messageToRow, rowToConversation, rowToMessage } from './types';
-import type { IChannelPluginConfig, IChannelUser, IChannelSession, IChannelPairingRequest, IChannelUserRow, IChannelSessionRow, IChannelPairingCodeRow, PluginType, PluginStatus } from '@/channels/types';
-import { rowToChannelUser, rowToChannelSession, rowToPairingRequest } from '@/channels/types';
-import { encryptCredentials, decryptCredentials } from '@/channels/utils/credentialCrypto';
+
+import type { IDatabase } from './interfaces';
 
 /**
  * Main database class for AionUi
  * Uses better-sqlite3 for fast, synchronous SQLite operations
  */
-export class AionUIDatabase {
+export class AionUIDatabase implements IDatabase {
   private db: Database.Database;
   private readonly defaultUserId = 'system_default_user';
   private readonly systemPasswordPlaceholder = '';
@@ -1096,12 +1098,24 @@ export class AionUIDatabase {
   }
 }
 
-// Export singleton instance
-let dbInstance: AionUIDatabase | null = null;
+import { FileDatabase } from './FileDatabase';
 
-export function getDatabase(): AionUIDatabase {
+// Export singleton instance
+let dbInstance: IDatabase | null = null;
+
+export function getDatabase(): IDatabase {
   if (!dbInstance) {
-    dbInstance = new AionUIDatabase();
+    try {
+      // 尝试初始化 SQLite 数据库
+      // Attempt to initialize SQLite database
+      dbInstance = new AionUIDatabase();
+    } catch (error) {
+      console.error('[Database] SQLite initialization failed, falling back to FileDatabase:', error);
+      console.log('[Database] Using FileBased Storage for this session.');
+      // 降级为文件存储
+      // Fallback to file storage
+      dbInstance = new FileDatabase();
+    }
   }
   return dbInstance;
 }
